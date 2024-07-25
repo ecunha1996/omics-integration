@@ -1,10 +1,13 @@
 {
   "MODEL": "ngaditana",
-  "MODEL_PATH": "ngaditana/models/model_ng.xml",
-  "CONSISTENT_MODEL_PATH": "ngaditana/models/model_ng_consistent.xml",
+  "MODEL_PATH": "/home/ecunha/omics-integration/data/ngaditana/models/model_ng.xml",
+  "CONSISTENT_MODEL_PATH": "/home/ecunha/omics-integration/data/ngaditana/models/model_ng_consistent.xml",
+  "MEDIA_PATH" : "/home/ecunha/omics-integration/data/ngaditana/media.xlsx",
+  "MEDIA_SHEET": "media_with_glucan",
   "DATASET": "PRJNA589063",
-  "RAW_DATA": "ngaditana/PRJNA589063/raw_data.tsv",
-  "GETMM" : "ngaditana/PRJNA589063/getmm_with_replicates.tsv",
+  "RAW_DATA": "/home/ecunha/omics-integration/data/ngaditana/PRJNA589063/raw_data.tsv",
+  "GETMM" : "/home/ecunha/omics-integration/data/ngaditana/PRJNA589063/getmm_with_replicates.tsv",
+  "SAMPLES_TO_DROP": ["C3_4"],
   "OBJECTIVE": "e_Biomass__cytop",
   "MEDIUM_NAME": "f2 medium",
   "NOMENCLATURE": "NCBI",
@@ -18,6 +21,7 @@
     "gimme"
   ],
   "THREAD_NUMBER": 40,
+  "TROPPO_RESULTS_PATH": "/home/ecunha/omics-integration/results/ngaditana/PRJNA589063",
   "EVALUATE_TASKS": "False",
   "GAP_FILLING": "False",
   "RECONSTRUCT_MODELS": "",
@@ -48,5 +52,10 @@
     "SRR10431613": "N3_4",
     "SRR10431615": "C3_2",
     "SRR10431616": "C3_1"
-  }
+  },
+"uptake_drains": {
+        "f2 medium": ["EX_C00014__dra", "EX_C00059__dra", "EX_C01330__dra", "EX_C00011__dra", "EX_C14818__dra",
+                      "EX_C00080__dra", "EX_C00001__dra", "EX_C00305__dra", "EX_C01327__dra", "EX_C00244__dra",
+                      "EX_C00009__dra",                      "EX_C00007__dra", "EX_C00205__dra", "EX_C00378__dra", "EX_C00120__dra", "EX_C02823__dra",
+                      "DM_C00965__chlo" ]}
 }

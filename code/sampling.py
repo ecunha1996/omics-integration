@@ -3,6 +3,7 @@ import itertools
 import os
 import numpy as np
 import pandas as pd
+from cobra.flux_analysis.loopless import _add_cycle_free
 from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from scipy import stats
@@ -37,6 +38,48 @@ def split_reversible_reactions(model_to_sample):
     model_to_sample.add_reactions(new_reactions)
     return model_to_sample
 
+def load_model(filename):
+    model_to_sample = MyModel(filename, "e_Biomass__cytop")
+    # model_to_sample = MyModel("/home/ecunha/omics-integration/data/ngaditana/models/model_ng.xml", "e_Biomass__cytop")
+    model_to_sample.objective = "e_Biomass__cytop"
+    #model_to_sample.remove_reactions(find_blocked_reactions(model_to_sample), remove_orphans=True)
+    for exchange in model_to_sample.exchanges:
+        if exchange.lower_bound < 0 and not exchange.id.startswith("EX_C00205"):
+                exchange.lower_bound = -10
+        elif exchange.id.startswith("EX_C00205"):
+                exchange.lower_bound = -20
+    for demand in model_to_sample.demands:
+        if 'photon' not in demand.id:
+            demand.bounds = (0, 0)
+    assert model_to_sample.optimize().status == "optimal"
+    return model_to_sample#
+
+def achr_sample_old(filename, biomass_reaction):
+    try:
+        model = load_model(filename)
+        sol = model.optimize(objective_sense=None)
+        fluxes = sol.fluxes
+        opt = model.slim_optimize()
+        print(opt)
+        prob = model.problem
+        loopless_obj_constraint = prob.Constraint(
+            model.objective.expression,
+            lb=opt*0.15,
+            name="loopless_obj_constraint",
+        )
+        model.add_cons_vars([loopless_obj_constraint])
+        _add_cycle_free(model, fluxes)
+        solution = model.optimize(objective_sense=None)
+        solution.objective_value = loopless_obj_constraint.primal
+        print(solution.objective_value)
+        model.remove_cons_vars(loopless_obj_constraint)
+        model.reactions.e_Biomass__cytop.bounds = (opt*0.15, opt*0.6)
+        sampler = ACHRSampler(model, thinning=1, seed=42)
+        samples = sampler.sample(5)
+        return {f"{filename.split('/')[-1].split('.xml')[0]}": samples}
+    except Exception as e:
+        print(e)
+        print(f"Error in {filename}")
 
 def achr_sample(filename, biomass_reaction):
     try:
@@ -59,10 +102,11 @@ def achr_sample(filename, biomass_reaction):
         solution_after_spliting_reversible_reactions = model_to_sample.optimize().objective_value
         assert round(initial_solution, 5) == round(solution_after_spliting_reversible_reactions, 5)
         model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = initial_solution * 0.15
+        solution = model_to_sample.optimize(objective_sense=None)
+        print(solution.objective_value)
         sampler = ACHRSampler(model_to_sample, thinning=100, seed=42)
-        samples = sampler.sample(1000)
-
-        return {f"{filename.split('/')[-1].split('.xml')[0]}_ACHR_samples.h5": samples}
+        samples = sampler.sample(1)
+        return {f"{filename.split('/')[-1].split('.xml')[0]}": samples}
     except Exception as e:
         print(e)
         print(f"Error in {filename}")
@@ -354,22 +398,19 @@ if __name__ == '__main__':
         results_dataframe = pd.DataFrame.from_dict(data=model.pathway_reactions_map, orient='index').T
         results_dataframe.to_csv(os.path.join(os.path.dirname(params.get("model", "./")), "pathways_map.csv"), index=False)
     filenames = [os.path.join(params.get("specific_models_dir"), file) for file in listdir(params.get("specific_models_dir"))
-                 if (file.endswith("3_fastcore_0.55.xml") or
-                     file.endswith("3_gimmet0.55.xml") or
-                     file.endswith("5_fastcore_0.55.xml") or
-                     file.endswith("5_gimme_0.55.xml"))
+                 if (file.endswith("3_fastcore_0.3.xml"))
                  ]
-    # sampling_filenames = Parallel(n_jobs=max(30, len(filenames)))(delayed(achr_sample)(filename, "e_Biomass__cytop") for filename in filenames)
-    # sampling_filenames = {k: v for d in sampling_filenames for k, v in d.items()}
-    sampling_filenames = {file.split("/")[-1].replace(".xml", "_ACHR_samples.h5"):None for file in filenames}
+    sampling_filenames = Parallel(n_jobs=max(30, len(filenames)))(delayed(achr_sample)(filename, "e_Biomass__cytop") for filename in filenames)
+    sampling_filenames = {k: v for d in sampling_filenames for k, v in d.items()}
+    # sampling_filenames = {file.split("/")[-1].replace(".xml", ""):None for file in filenames}
     folder = '/'.join(filenames[0].split("/")[:-2])
     # if os.path.exists(f"{folder}/samples.h5"):
     #     os.remove(f"{folder}/samples.h5")
-    # for sample_name, sample in sampling_filenames.items():
-    #     sample.to_csv(f"{folder}/{sample_name}_ACHR_samples.csv", index=False, sep="\t")
+    for sample_name, sample in sampling_filenames.items():
+        sample.to_csv(f"{folder}/{sample_name}_ACHR_samples.csv", index=False, sep="\t")
     #
     print("Loading results...")
-    samples = {filename.split("_")[0] + "_" + filename.split("_")[1]: pd.read_csv(f"{folder}{filename}_ACHR_samples.csv", sep="\t").round(6) for filename in sampling_filenames.keys()}
+    samples = {filename.split("_")[0] + "_" + filename.split("_")[1] : pd.read_csv(f"{folder}/{filename}_ACHR_samples.csv", sep="\t").round(6) for filename in sampling_filenames.keys()}
     # samples = {filename.split("_")[1] + "_" + filename.split("_")[-4]: None for filename in sampling_filenames}
     # for sample in samples.values():
     #     sample.drop([col for col in sample.columns if col.startswith("EX_") or col.startswith("DM_") or col.startswith("Sk_")
@@ -379,6 +420,8 @@ if __name__ == '__main__':
     for pair in pairs:
         kstest_results['_'.join(pair)] = kstest(samples.get(pair[0]), samples.get(pair[1]), '_'.join(pair), '../results/ngaditana/PRJNA589063/dfa/')
     samples = {key: remove_reverse_reactions(sample) for key, sample in samples.items()}
+    for sample_name, sample in samples.items():
+        sample.to_csv(f"{folder}/{sample_name}_ACHR_samples_no_reverse.csv", index=False, sep="\t")
     dataset = pd.read_csv(os.path.join(os.path.dirname(params.get("model", "./")), "pathways_map.csv"))
     for pair, kstest_result in kstest_results.items():
         pathway_enrichment(kstest_result, pair, dataset, '../results/ngaditana/PRJNA589063/dfa/')
