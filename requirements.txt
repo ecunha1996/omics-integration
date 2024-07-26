@@ -1,0 +1,11 @@
+gsmmutils @ git+https://github.com/ecunha1996/GSMMutils.git
+matplotlib~=3.5.2
+pandas~=1.3.5
+numpy~=1.21.6
+cobra~=0.29.0
+joblib~=1.4.2
+scipy~=1.11.3
+statsmodels~=0.14.2
+conorm~=1.2.0
+kaleido~=0.2.1
+tqdm~=4.66.4
