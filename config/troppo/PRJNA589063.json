@@ -14,8 +14,7 @@
   "GLOBAL_THRESHOLD_LOWER": 1,
   "LOCAL_THRESHOLD": 2,
   "ALGORITHMS": [
-    "fastcore",
-    "gimme"
+    "fastcore"
   ],
   "THREAD_NUMBER": 40,
   "EVALUATE_TASKS": "False",

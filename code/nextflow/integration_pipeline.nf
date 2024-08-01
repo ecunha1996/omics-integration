@@ -7,6 +7,10 @@ process getIntegrationResults {
     // Define input parameters
     input:
     val CONFIG_PATH
+
+    output:
+    val 'is_ok'
+
     script:
     """
     #!/usr/bin/env python
@@ -20,6 +24,7 @@ process getIntegrationResults {
 process reconstructModels {
     // Define input parameters
     input:
+    val 'is_integrated'
     val CONFIG_PATH
     script:
     """
@@ -34,6 +39,6 @@ process reconstructModels {
 
 // Define the workflow
 workflow {
-    getIntegrationResults(params.CONFIG_PATH)
-    reconstructModels(params.CONFIG_PATH)
+    integrated = getIntegrationResults(params.CONFIG_PATH)
+    reconstructModels(integrated, params.CONFIG_PATH)
 }
