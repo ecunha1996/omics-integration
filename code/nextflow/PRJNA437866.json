@@ -1,0 +1,36 @@
+{
+  "MODEL": "dsalina",
+  "MODEL_PATH": "/home/ecunha/omics-integration/data/dsalina/models/model_ds.xml",
+  "CONSISTENT_MODEL_PATH": "/home/ecunha/omics-integration/data/dsalina/models/model_ds_consistent.xml",
+  "MEDIA_PATH" : "/home/ecunha/omics-integration/data/dsalina/media.xlsx",
+  "MEDIA_SHEET": "media_with_starch",
+  "DATASET": "PRJNA437866",
+  "RAW_DATA": "/home/ecunha/omics-integration/data/dsalina/PRJNA437866/raw_data_with_length.tsv",
+  "GETMM" : "/home/ecunha/omics-integration/data/dsalina/PRJNA437866/getmm_with_replicates.tsv",
+  "SAMPLES_TO_DROP": [],
+  "OBJECTIVE": "e_Biomass__cytop",
+  "MEDIUM_NAME": "f2 medium",
+  "NOMENCLATURE": "NCBI",
+  "OMICS_TYPE": "transcriptomics",
+  "THRESHOLDING_STRATEGY": "local t2",
+  "GLOBAL_THRESHOLD_UPPER": 3,
+  "GLOBAL_THRESHOLD_LOWER": 1,
+  "LOCAL_THRESHOLD": 2,
+  "ALGORITHMS": [
+    "fastcore",
+    "gimme"
+  ],
+  "THREAD_NUMBER": 40,
+  "TROPPO_RESULTS_PATH": "/home/ecunha/omics-integration/results/dsalina/PRJNA437866",
+  "EVALUATE_TASKS": "False",
+  "GAP_FILLING": "False",
+  "RECONSTRUCT_MODELS": "",
+  "obj_frac": 0.15,
+  "objectives":{"e_Biomass__cytop": 1},
+"uptake_drains": {
+        "f2 medium": ["EX_C00014__dra", "EX_C00059__dra", "EX_C01330__dra", "EX_C00011__dra", "EX_C14818__dra",
+                      "EX_C00080__dra", "EX_C00001__dra", "EX_C00305__dra", "EX_C01327__dra", "EX_C00244__dra",
+                      "EX_C00009__dra",    "EX_C00007__dra", "EX_C00205__dra", "EX_C00378__dra", "EX_C00120__dra", "EX_C02823__dra",
+                      "DM_C00369__chlo" ]},
+  "PATHWAYS_MAP": "/home/ecunha/omics-integration/data/dsalina/models/pathways_map.csv"
+}

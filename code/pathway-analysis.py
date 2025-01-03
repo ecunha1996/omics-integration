@@ -1,10 +1,21 @@
+
+
 import json
+import os.path
+import webbrowser
+from copy import deepcopy
+from os.path import join
 
 import pandas as pd
-
-from gsmmutils import MyModel, DATA_PATH
+from gsmmutils.model import MyModel
 from gsmmutils.api.kegg import search_pathway_map_id
-import webbrowser
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import sys
+sys.path.append("../../")
+from utils import load_samples
+plt.rcParams["font.family"] = "Arial"
 
 
 def load_data(filenames):
@@ -14,8 +25,9 @@ def load_data(filenames):
     :return:
     """
     res = {}
-    for filename in filenames:
-        res[filename.split("\\")[-1].split(".csv")[0]] = [pd.read_csv(filename, index_col=0), pd.read_csv(filename.replace("_results", ""))]
+    for key, filename in filenames.items():
+        tmp = pd.read_csv(filename, index_col=0, sep="\t")
+        res[key] = [(tmp.loc[(abs(tmp['FC']) >= 0.0) & (tmp['Padj'] <= 0.05), :]) , pd.read_csv(filename.replace("_all_results.tsv", ".csv"))]
     return res
 
 
@@ -33,7 +45,7 @@ def paint_KEGG_pathway(reaction_ids, pathway_name, model):
                         if info['FC'] > 0:
                             reaction_id = color_from_fc(info['FC'], '%20green%0A'.join(reaction_id))
                         else:
-                            reaction_id = color_from_fc(info['FC'], '%20red%0A"'.join(reaction_id))
+                            reaction_id = color_from_fc(info['FC'], '%20red%0A'.join(reaction_id))
                     else:
                         reaction_id = color_from_fc(info['FC'], reaction_id)
                 else:
@@ -42,8 +54,11 @@ def paint_KEGG_pathway(reaction_ids, pathway_name, model):
                 reaction_id = color_from_fc(info['FC'], reaction.split("__")[0])
             if reaction_id:
                 url += reaction_id
+        print(f"Pathway found: {pathway_name}")
         print(url)
         webbrowser.open(url)
+    else:
+        print(f"Pathway not found: {pathway_name}")
 
 def color_from_fc(fc, reaction_id):
     if fc > 0:
@@ -54,10 +69,10 @@ def color_from_fc(fc, reaction_id):
 
 def get_reactions_pathway_map(model_path: str):
     model = MyModel(model_path, "e_Biomass__cytop")
-    json.dump(model.reactions_pathways_map, open(rf"{DATA_PATH}/omics\reactions_pathways_map.json", "w"))
-    json.dump(model.pathway_reactions_map, open(rf"{DATA_PATH}/omics\pathways_reactions_map.json", "w"))
-    reactions_pathways_map = json.load(open(rf"{DATA_PATH}/omics\reactions_pathways_map.json", "r"))
-    pathways_reactions_map = json.load(open(rf"{DATA_PATH}/omics\pathways_reactions_map.json", "r"))
+    json.dump(model.reactions_pathways_map, open(rf"{DATA_PATH}/reactions_pathways_map.json", "w"))
+    json.dump(model.pathway_reactions_map, open(rf"{DATA_PATH}/pathways_reactions_map.json", "w"))
+    reactions_pathways_map = json.load(open(rf"{DATA_PATH}/reactions_pathways_map.json", "r"))
+    pathways_reactions_map = json.load(open(rf"{DATA_PATH}/pathways_reactions_map.json", "r"))
     return reactions_pathways_map, pathways_reactions_map, model
 
 
@@ -66,18 +81,248 @@ def get_der_by_pathway(pathway_name, pathway_map, data, model):
     paint_KEGG_pathway(reactions, pathway_name, model)
 
 
-if __name__ == '__main__':
-    data = load_data([
-        r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\nacl_fastcore_results.csv",
-        r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\nacl_gimme_results.csv",
-        #r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\h2o2_fastcore_results.csv",
-        #r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\h2o2_gimme_results.csv",
-        # r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\ml_ll_results.csv",
-        # r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\hl_ml_results.csv",
-        # r"C:\Users\Bisbii\PythonProjects\gsmmutils\data\omics\hl_ll_results.csv"
-    ])
-    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map("../data/ngaditana/models/model_ng.xml")
+def reaction_analysis():
+    data = load_data({
+        # join(RESULTS_PATH, "dfa/C5_fastcore_0.4_loopless_ACHR_P5_fastcore_0.4_loopless_ACHR_results.csv")
+        # join(RESULTS_PATH, "dfa/control_fastcore_0.6_loopless_ACHR_nacl_fastcore_0.6_loopless_ACHR_all_results.tsv")
+        # join(RESULTS_PATH, "dfa/control_gimme_0.4_loopless_ACHR_nacl_gimme_0.4_loopless_ACHR_all_results.tsv")
+        # "Control vs H2O2 GIMME": join(RESULTS_PATH, "dfa/control_gimme_0.4_loopless_ACHR_h2o2_gimme_0.4_loopless_ACHR_all_results.tsv"),
+        # "Control vs NaCl GIMME": join(RESULTS_PATH, "dfa/control_gimme_0.4_loopless_ACHR_nacl_gimme_0.4_loopless_ACHR_all_results.tsv"),
+
+        # "LL vs ML FASTCORE": join(RESULTS_PATH, "dfa/LL_fastcore_0.6_ACHR_ML_fastcore_0.6_ACHR_all_results.tsv"),
+        # "HL vs LL FASTCORE": join(RESULTS_PATH, "dfa/HL_fastcore_0.6_ACHR_LL_fastcore_0.6_ACHR_all_results.tsv"),
+
+        "LL vs ML GIMME": join(RESULTS_PATH, "dfa/LL_gimme_0.4_ACHR_ML_gimme_0.4_ACHR_all_results.tsv"),
+         "LL vs HL GIMME": join(RESULTS_PATH, "dfa/LL_gimme_0.4_ACHR_HL_gimme_0.4_ACHR_all_results.tsv"),
+    })
+    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ds.xml"))
+
+    common_pathways = set(data[list(data.keys())[0]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[1]][1].Pathways.tolist())) #set() #
+    fig, ax = plt.subplots(1, 2, figsize=(7.08, 6.3))
+    for i, (condition, df) in enumerate(data.items()):
+        dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
+        fc_plot(fig, ax[i], data[list(data.keys())[i]][0], {pathway: reaction for pathway, reaction in pathways_reactions_map.items() if pathway in dfa_paths},
+                condition, common_pathways, i)
+    plt.tight_layout()
+    plt.savefig(f"{RESULTS_PATH}/dsalina_light.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+    plt.show()
+    plt.close()
+
+
+    # get_der_by_pathway("Carbon fixation in photosynthetic organisms", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Glycine, serine and threonine metabolism", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Pentose phosphate pathway", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Citrate cycle (TCA cycle)", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    #get_der_by_pathway("Cysteine and methionine metabolism", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Pyruvate metabolism", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Glycolysis / Gluconeogenesis", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    get_der_by_pathway("Carotenoid biosynthesis", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    get_der_by_pathway("Carotenoid biosynthesis", pathways_reactions_map, data[list(data.keys())[1]][0], model)
+    # get_der_by_pathway("Glyoxylate and dicarboxylate metabolism", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Carbon fixation pathways in prokaryotes", pathways_reactions_map, data[list(data.keys())[0]][0], model)
     for key in data.keys():
         for pathway in data[key][1].Pathways.tolist():
             if pathway != "Fatty acid metabolism":
                 get_der_by_pathway(pathway, pathways_reactions_map, data[key][0], model)
+
+
+def pathway_enrichment(gene_symbols, custom_mapping):
+    with open(join(RESULTS_PATH, 'deg/custom_pathway.gmt'), 'w') as gmt_file:
+        for pathway, group in custom_mapping.groupby('PathwayID'):
+            genes = '\t'.join(group['GeneID'])
+            gmt_file.write(f"{pathway}\tCustom Pathway\t{genes}\n")
+
+    enrichr_results = gp.enrichr(
+        gene_list=gene_symbols,
+        gene_sets=join(RESULTS_PATH, 'deg/custom_pathway.gmt'),
+        organism='hs',
+        outdir=join(RESULTS_PATH, 'deg/enrichr'),
+        cutoff=0.05
+    )
+    enrichr_results.results.to_csv('custom_pathway_enrichment.csv', index=False)
+
+def get_gene_pathway_map(model):
+    gene_pathway_ids = {}
+    pathway_ids = {}
+    pathway_id_c = 0
+    if not os.path.exists(join(RESULTS_PATH, "pathway_ids.json")):
+        for pathway in model.groups:
+            kegg_id = search_pathway_map_id(pathway.name)
+            if kegg_id:
+                pathway_ids[pathway.name] = kegg_id
+            else:
+                pathway_ids[pathway.name] = f"ng{pathway_id_c}"
+                pathway_id_c += 1
+        with open(join(RESULTS_PATH, "pathway_ids.json"), "w") as f:
+            json.dump(pathway_ids, f, indent=4)
+    else:
+        pathway_ids = json.load(open(join(RESULTS_PATH, "pathway_ids.json"), "r"))
+    for gene in model.genes:
+        gene_pathway_ids[gene.id] = []
+        for pathway in model.genes_pathways_map[gene.id]:
+            gene_pathway_ids[gene.id].append(pathway_ids[pathway])
+
+    gene_pathway_ids = pd.DataFrame.from_dict(gene_pathway_ids, orient='index')
+    gene_pathway_ids["GeneID"] = gene_pathway_ids.index
+    gene_pathway_ids.reset_index(drop=True, inplace=True)
+    gene_pathway_ids = gene_pathway_ids.melt(id_vars="GeneID", value_name = "PathwayID")
+    gene_pathway_ids = gene_pathway_ids.dropna(subset=['PathwayID'])
+    gene_pathway_ids.to_csv(join(RESULTS_PATH, "deg/gene_pathway.csv"), sep="\t")
+    return gene_pathway_ids
+
+
+def gene_analysis():
+    data =  pd.read_csv(join(RESULTS_PATH, "deg/degs.tsv"), sep="\t", index_col=0)
+    data.index = [e.replace("-", "_") for e in data.index]
+    _, _, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
+    model.get_genes_pathways_map()
+    if not os.path.exists(join(RESULTS_PATH, "deg/gene_pathway.csv")):
+        gene_pathway_ids = get_gene_pathway_map(data, model)
+    else:
+        gene_pathway_ids = pd.read_csv(join(RESULTS_PATH, "deg/gene_pathway.csv"), sep="\t", index_col=0)
+    pathway_enrichment(data.index.to_list(), gene_pathway_ids)
+
+def fc_plot(fig, ax, data, pathways_map, condition_name, common_pathways, plot_number):
+
+    np.random.seed(42)
+    values = {}
+
+    for pathway, reactions in pathways_map.items():
+        values[pathway] = data.loc[data.index.isin(reactions)].FC.tolist()
+    bar_width = 0.6
+
+    # plt.figure(figsize=(6.4, 6.5))
+    # for i, (pathway, value) in enumerate(values.items()):
+    #     plt.scatter(value, [pathway] * len(value), label=pathway, alpha=0.6)
+    #
+    # plt.xlabel('FC')
+    # plt.title(condition_name)
+    # plt.grid(True)
+    # plt.yticks(ha='right')
+    # plt.tight_layout()
+    # plt.savefig(f"/home/ecunha/omics-integration/results/ngaditana/PRJNA589063/{condition_name}_scatter.png", bbox_inches='tight', dpi=800)
+    # plt.show()
+    # plt.close()
+
+    # plt.figure(figsize=(6.4, 4.8))
+    # for i, (pathway, value) in enumerate(values.items()):
+    #     positive_vals = len([v for v in value if v > 0])
+    #     negative_vals = len([v for v in value if v < 0])
+    #     plt.barh(y=i - bar_width, width=negative_vals, height=bar_width, color='r', label='Negative')
+    #     plt.barh(y=pathway, width=positive_vals, height=bar_width, color='g', label='Positive')
+    #
+    # plt.legend()
+    # plt.xlabel('Number of Reactions')
+    # plt.title(condition_name)
+    # plt.grid(True)
+    # plt.yticks(ha='right')
+    # plt.tight_layout()
+    # plt.savefig(f"/home/ecunha/omics-integration/results/ngaditana/PRJNA589063/{condition_name}_bar.png", bbox_inches='tight', dpi=600)
+    # plt.show()
+    # plt.close()
+
+    for i, (pathway, value) in enumerate(values.items()):
+        positive_vals = len([v for v in value if v > 0])
+        negative_vals = len([v for v in value if v < 0])
+        ax.barh(y=pathway, width=negative_vals, height=bar_width, color='r', label='Negative FC' if i == 0 else "")
+        ax.barh(y=pathway, width=positive_vals, height=bar_width, color='g', label='Positive FC' if i == 0 else "")
+
+    ax.set_yticklabels([split_label(label, 32) for label in values.keys()], linespacing=0.85)
+
+    for lab in ax.get_yticklabels():
+        if lab.get_text().replace("\n", "") in common_pathways or lab.get_text().replace("\n", " ") in common_pathways:
+            lab.set_fontweight('bold')
+        lab.set_fontsize(7)
+
+    ax.legend(fontsize=7)
+    ax.set_xlabel('Number of Reactions', fontsize=7)
+    # ax.set_title(' '.join(condition_name.split()[0:-1]))
+    # add a letter on the topleft of the plot
+    # ax.grid(True)
+    ax.tick_params(axis='x', labelsize=7)
+    number_letter_map = {0: 'A', 1: 'B'}
+    ax.text(-0.5, 1.04, number_letter_map[plot_number], fontsize=10, transform=ax.transAxes, fontweight='bold', va='top', ha='right')
+    # ax.set_yticks(ha='right')
+
+def split_labels(labels, max_line_length=45):
+    split_labels = []
+    for label in labels:
+        words = label.split()
+        new_label = ""
+        current_line = ""
+        for word in words:
+            if len(current_line) + len(word) + 1 > max_line_length:
+                new_label += current_line + "\n"
+                current_line = word
+            else:
+                if current_line:
+                    current_line += " " + word
+                else:
+                    current_line = word
+        new_label += current_line
+        split_labels.append(new_label)
+    return split_labels
+
+def split_label(label, max_line_length=25):
+    words = label.split()
+    new_label = ""
+    current_line = ""
+    for word in words:
+        if len(current_line) + len(word) + 1 > max_line_length:
+            new_label += current_line + "\n"
+            current_line = word
+        else:
+            if current_line:
+                current_line += " " + word
+            else:
+                current_line = word
+    new_label += current_line
+    return new_label
+
+def get_enzymes_map(model, bmgr):
+    labels = []
+    ec_number_enzyme_map = {"3.1.1.3": "LIP", "2.3.1.20": "DGAT", "2.3.1.158": "PDAT", "1.14.19.25": "FAD3",
+                            "3.1.1.23": "MLIP", "3.1.3.36": "INPP5K", "2.7.1.68": "PIP5K", "2.7.8.11": "PIS", "3.1.3.4": "PAH1",
+                            "1.14.19.30": "D5Des", "2.3.1.22": "LPGAT1", "1.14.19.47": "DES6", "1.14.19.22": "FAD2",
+                            "1.14.19.25,1.14.19.35": "FAD3", "2.7.1.107": "DGKG", '1.14.19.25,1.14.19.36': "FAD3",
+                            "1.14.19.45": "desA", "2.3.1.15": "GPAT", "2.3.1.51": "LPAT"}
+    for reaction in bmgr.index.tolist():
+        ec_number = model.reactions.get_by_id(reaction).annotation.get("ec-code", "")
+        if isinstance(ec_number, list):
+            ec_number = ','.join(ec_number)
+        labels.append(ec_number_enzyme_map.get(ec_number, ""))
+    return labels
+
+def plot_heatmap():
+    data = load_samples(RESULTS_PATH, samples=["C3", "C5", "N3", "N5", "P3", "P5"])
+    g = sns.clustermap(data['all'], cmap="viridis", yticklabels=False)
+    plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, fontsize=14)
+    plt.savefig(join(RESULTS_PATH, "ngaditana_heatmap_complete.png"), dpi=600)
+    gimme = data['gimme']
+    model = MyModel(f"{DATA_PATH}/models/model_ng.xml", "e_Biomass__cytop")
+    bmgr = gimme.loc[(gimme.index.str.startswith("BMGR")) & (
+            (gimme.index.isin(model.pathway_reactions_map["BOIMMG (TAG)"])) |
+            ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (DAG)"]))) |
+            ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (PA)"])))
+    )]
+    bmgr = bmgr.filter(regex="N3|C3|P3|C5|P5|N5_gimme")
+    bmgr = bmgr.loc[~bmgr.index.str.contains("mem")]
+    row_std = bmgr.std(axis=1)
+    bmgr = bmgr[row_std != 0]
+    labels = get_enzymes_map(model, bmgr)
+    tmp = deepcopy(bmgr)
+    tmp.index = labels
+    grouped_df = tmp.groupby(tmp.index).mean()
+    g = sns.clustermap(grouped_df, cmap="viridis", z_score=0)
+    plt.savefig(join(RESULTS_PATH, "dsalina_heatmap_bmgr.png"), dpi=600)
+
+
+
+
+
+if __name__ == '__main__':
+    DATA_PATH = "/home/ecunha/omics-integration/data/dsalina"
+    # RESULTS_PATH = "/home/ecunha/omics-integration/results/dsalina/PRJNA437866"
+    RESULTS_PATH = "/home/ecunha/omics-integration/results/dsalina/PRJNA495151"
+    reaction_analysis()
+    # gene_analysis()
