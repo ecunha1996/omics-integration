@@ -1,9 +1,10 @@
 import json
 import os.path
 import webbrowser
+from collections import OrderedDict
 from copy import deepcopy
 from os.path import join
-
+import gseapy as gp
 import matplotlib
 import pandas as pd
 from gsmmutils.model import MyModel
@@ -26,7 +27,10 @@ def load_data(filenames):
     res = {}
     for key, filename in filenames.items():
         tmp = pd.read_csv(filename, index_col=0, sep="\t")
-        res[key] = [(tmp.loc[(abs(tmp['FC']) >= 0.0) & (tmp['Padj'] <= 0.05), :]) , pd.read_csv(filename.replace("_all_results.tsv", ".csv"))]
+        fucking_df = pd.read_csv(filename.replace("_all_results.tsv", ".csv")).sort_values(by="P-value_adj", ascending=True) #.iloc[:20, ]
+        res[key] = [(tmp.loc[(abs(tmp['FC']) >= 0.0) & (tmp['Padj'] <= 0.05), :]) , fucking_df]
+    for key, df in res.items():
+        df[1].Pathways = df[1].Pathways.replace("Ubiquinone and other terpenoid-quinone biosynthesis", "Quinone biosynthesis")
     return res
 
 
@@ -66,12 +70,18 @@ def color_from_fc(fc, reaction_id):
         return reaction_id + "%20red%0A"
 
 
-def get_reactions_pathway_map(model_path: str):
-    model = MyModel(model_path, "e_Biomass__cytop")
+def get_reactions_pathway_map(model_path: str = None, model=None):
+    if not model:
+        model = MyModel(model_path, "e_Biomass__cytop")
     json.dump(model.reactions_pathways_map, open(rf"{DATA_PATH}/reactions_pathways_map.json", "w"))
     json.dump(model.pathway_reactions_map, open(rf"{DATA_PATH}/pathways_reactions_map.json", "w"))
     reactions_pathways_map = json.load(open(rf"{DATA_PATH}/reactions_pathways_map.json", "r"))
     pathways_reactions_map = json.load(open(rf"{DATA_PATH}/pathways_reactions_map.json", "r"))
+    pathways_reactions_map["Quinone biosynthesis"] = pathways_reactions_map.pop("Ubiquinone and other terpenoid-quinone biosynthesis")
+    for reaction, pathways in reactions_pathways_map.items():
+        if "Ubiquinone and other terpenoid-quinone biosynthesis" in pathways:
+            pathways.remove("Ubiquinone and other terpenoid-quinone biosynthesis")
+            pathways.append("Quinone biosynthesis")
     return reactions_pathways_map, pathways_reactions_map, model
 
 
@@ -89,61 +99,122 @@ def reaction_analysis():
         # "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_loopless_ACHR_P5_gimme_0.4_loopless_ACHR_all_results.tsv")
         # "C3 vs N3 GIMME": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_N3_gimme_0.4_ACHR_all_results.tsv"),
         # "C3 vs P3 GIMME": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_P3_gimme_0.4_ACHR_all_results.tsv"),
-        "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_N5_gimme_0.4_ACHR_all_results.tsv"),
+        # "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_N5_gimme_0.4_ACHR_all_results.tsv"),
+        # "C3 vs N3 FASTCORE": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_N3_fastcore_0.4_ACHR_all_results.tsv"),
+        # "C5 vs N5 FASTCORE": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
         # "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_P5_gimme_0.4_ACHR_all_results.tsv")
         # "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
         # "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_P5_fastcore_0.4_ACHR_all_results.tsv")
         # join(RESULTS_PATH, "dfa/C3_gimme_0.4_loopless_ACHR_N3_gimme_0.4_loopless_ACHR_all_results.tsv")
+        "C5 vs N5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs N5 gimme": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_N5_gimme_0.4_ACHR_all_results.tsv")
     })
-    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
+    model = MyModel(join(DATA_PATH, "models/model_ng.xml"), "e_Biomass__cytop")
+    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(model=model)
 
-    g = plot_heatmap()
+    g = plot_heatmap(model)
     g.gs.update(left=0.52, right=0.9)
 
     # create new gridspec for the right part
     gs2 = matplotlib.gridspec.GridSpec(1, 1, left=0.25, right=0.48)
     # create axes within this new gridspec
     ax2 = g.fig.add_subplot(gs2[0])
-
     common_pathways = set() #set(data[list(data.keys())[0]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[1]][1].Pathways.tolist()))
     for i, (condition, df) in enumerate(data.items()):
         dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
-        fc_plot(ax2, data[list(data.keys())[i]][0], {pathway: reaction for pathway, reaction in pathways_reactions_map.items() if pathway in dfa_paths},
+        # create an ordered map, with the pathways sorted as in dfa_paths
+        ordered_pathway_map = OrderedDict()
+        for pathway in dfa_paths:
+            if pathway in pathways_reactions_map:
+                ordered_pathway_map[pathway] = pathways_reactions_map[pathway]
+        # reverse order
+        ordered_pathway_map = OrderedDict(reversed(list(ordered_pathway_map.items())))
+        fc_plot(ax2, data[list(data.keys())[i]][0], ordered_pathway_map,
                 condition, common_pathways, i)
+
+    get_der_by_pathway("Fatty acid biosynthesis", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    get_der_by_pathway("Fatty acid biosynthesis", pathways_reactions_map, data[list(data.keys())[0]][1], model)
+
     g.ax_cbar.set_position([0.9, 0.81, 0.03, 0.15])
     g.ax_cbar.set_yticklabels(labels=g.ax_cbar.get_yticklabels(), fontsize=8)
     g.fig.text(-0.2, 1.25, 'B', fontsize=10, transform=g.ax_heatmap.transAxes, fontweight='bold', va='top', ha='right')
     g.fig.text(-1.75, 1.25, 'A', fontsize=10, transform=g.ax_heatmap.transAxes, fontweight='bold', va='top', ha='right')
     # plt.tight_layout()
-    plt.savefig(f"{RESULTS_PATH}/ngaditana_omics.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+    # plt.savefig(f"{RESULTS_PATH}/ngaditana_omics.pdf", bbox_inches='tight', format='pdf', dpi=1200)
     # plt.savefig(f"{RESULTS_PATH}/ngaditana_omics.png", bbox_inches='tight', dpi=600)
     plt.show()
     plt.close()
 
+def reaction_analysis_double_conditions():
+    data = load_data({
+        "C3 vs N3 FASTCORE": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_N3_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs N5 FASTCORE": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
+    })
+    model = MyModel(join(DATA_PATH, "models/model_ng.xml"), "e_Biomass__cytop")
+    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(model=model)
+
+    g = plot_heatmap(model)
+    g.gs.update(left=0.52, right=0.9)
+
+    # create new gridspec for the right part
+    gs2 = matplotlib.gridspec.GridSpec(2, 1, left=0.25, right=0.48, height_ratios=[1, 1])
+    # create axes within this new gridspec
+    ax2 = g.fig.add_subplot(gs2[0, 0])
+    ax3 = g.fig.add_subplot(gs2[1, 0])
+
+    common_pathways = set() # set(data[list(data.keys())[0]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[1]][1].Pathways.tolist()))  #
+    for i, (condition, df) in enumerate(data.items()):
+        dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
+        ordered_pathway_map = OrderedDict()
+        for pathway in dfa_paths:
+            if pathway in pathways_reactions_map:
+                ordered_pathway_map[pathway] = pathways_reactions_map[pathway]
+        ordered_pathway_map = OrderedDict(reversed(list(ordered_pathway_map.items())))
+        if i == 0:
+            fc_plot(ax2, data[list(data.keys())[i]][0], ordered_pathway_map, condition, common_pathways, i)
+        elif i == 1:
+            fc_plot(ax3, data[list(data.keys())[i]][0], ordered_pathway_map, condition, common_pathways, i)
+
+    g.ax_cbar.set_position([0.9, 0.81, 0.03, 0.15])
+    g.ax_cbar.set_yticklabels(labels=g.ax_cbar.get_yticklabels(), fontsize=8)
+    g.fig.text(-0.2, 1.25, 'C', fontsize=10, transform=g.ax_heatmap.transAxes, fontweight='bold', va='top', ha='right')
+    g.fig.text(-1.75, 1.25, 'A', fontsize=10, transform=g.ax_heatmap.transAxes, fontweight='bold', va='top', ha='right')
+    g.fig.text(-1.75, 0.625, 'B', fontsize=10, transform=g.ax_heatmap.transAxes, fontweight='bold', va='top', ha='right')
+    plt.savefig(f"{RESULTS_PATH}/ngaditana_omics.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+    plt.show()
+    plt.close()
+
+
+
 def reaction_analysis_all():
     data = load_data({
-        # join(RESULTS_PATH, "dfa/C5_fastcore_0.4_loopless_ACHR_P5_fastcore_0.4_loopless_ACHR_results.csv")
-        # "C5 vs N5 FASTCORE": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_loopless_ACHR_N5_fastcore_0.4_loopless_ACHR_all_results.tsv"),
-        # "C5 vs P5 FASTCORE" : join(RESULTS_PATH, "dfa/C5_fastcore_0.4_loopless_ACHR_P5_fastcore_0.4_loopless_ACHR_all_results.tsv"),
-        # "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_loopless_ACHR_N5_gimme_0.4_loopless_ACHR_all_results.tsv"),
-        # "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_loopless_ACHR_P5_gimme_0.4_loopless_ACHR_all_results.tsv")
-        "C3 vs N3 GIMME": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_N3_gimme_0.4_ACHR_all_results.tsv"),
-        "C3 vs P3 GIMME": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_P3_gimme_0.4_ACHR_all_results.tsv"),
-        "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_N5_gimme_0.4_ACHR_all_results.tsv"),
-        "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_P5_gimme_0.4_ACHR_all_results.tsv")
-        # "C5 vs N5 GIMME": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
-        # "C5 vs P5 GIMME": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_P5_fastcore_0.4_ACHR_all_results.tsv")
-        # join(RESULTS_PATH, "dfa/C3_gimme_0.4_loopless_ACHR_N3_gimme_0.4_loopless_ACHR_all_results.tsv")
+
+        "C3 vs N3 fastcore": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_N3_fastcore_0.4_ACHR_all_results.tsv"),
+        "C3 vs P3 fastcore": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_P3_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs N5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs P5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_P5_fastcore_0.4_ACHR_all_results.tsv")
+        
+        
     })
     reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
+
+    # get_der_by_pathway("Carbon fixation in photosynthetic organisms", pathways_reactions_map, data[list(data.keys())[0]][0], model)
+    # get_der_by_pathway("Carbon fixation in photosynthetic organisms", pathways_reactions_map, data[list(data.keys())[0]][2], model)
+
 
     fig, axs = plt.subplots(2, 2, figsize=(7.08, 8))
 
     common_pathways = set()  # set(data[list(data.keys())[0]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[1]][1].Pathways.tolist())).
     for i, (condition, df) in enumerate(data.items()):
         dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
-        fc_plot(axs[i//2, i%2], data[list(data.keys())[i]][0], {pathway: reaction for pathway, reaction in pathways_reactions_map.items() if pathway in dfa_paths},
-                condition, common_pathways, i)
+        ordered_pathway_map = OrderedDict()
+        for pathway in dfa_paths:
+            if pathway in pathways_reactions_map:
+                ordered_pathway_map[pathway] = pathways_reactions_map[pathway]
+        ordered_pathway_map = OrderedDict(reversed(list(ordered_pathway_map.items())))
+
+        fc_plot(axs[i//2, i%2], data[list(data.keys())[i]][0], ordered_pathway_map,
+                condition, common_pathways, i, False)
 
     axs[0][0].text(-0.4, 1.05, 'A', fontsize=10, transform=axs[0][0].transAxes, fontweight='bold', va='top', ha='right')
     axs[0][1].text(-0.4, 1.05, 'B', fontsize=10, transform=axs[0][1].transAxes, fontweight='bold', va='top', ha='right')
@@ -167,7 +238,7 @@ def pathway_enrichment(gene_symbols, custom_mapping):
     enrichr_results = gp.enrichr(
         gene_list=gene_symbols,
         gene_sets=join(RESULTS_PATH, 'deg/custom_pathway.gmt'),
-        organism='hs',
+        organism="hs",
         outdir=join(RESULTS_PATH, 'deg/enrichr'),
         cutoff=0.05
     )
@@ -177,18 +248,18 @@ def get_gene_pathway_map(model):
     gene_pathway_ids = {}
     pathway_ids = {}
     pathway_id_c = 0
-    if not os.path.exists(join(RESULTS_PATH, "pathway_ids.json")):
-        for pathway in model.groups:
-            kegg_id = search_pathway_map_id(pathway.name)
-            if kegg_id:
-                pathway_ids[pathway.name] = kegg_id
-            else:
-                pathway_ids[pathway.name] = f"ng{pathway_id_c}"
-                pathway_id_c += 1
-        with open(join(RESULTS_PATH, "pathway_ids.json"), "w") as f:
-            json.dump(pathway_ids, f, indent=4)
-    else:
-        pathway_ids = json.load(open(join(RESULTS_PATH, "pathway_ids.json"), "r"))
+    # if not os.path.exists(join(RESULTS_PATH, "pathway_ids.json")):
+    for pathway in model.groups:
+        kegg_id = pathway.name.replace(" ", "_") #search_pathway_map_id(pathway.name)
+        if kegg_id:
+            pathway_ids[pathway.name] = kegg_id
+        else:
+            pathway_ids[pathway.name] = f"ng{pathway_id_c}"
+            pathway_id_c += 1
+    with open(join(RESULTS_PATH, "pathway_ids.json"), "w") as f:
+        json.dump(pathway_ids, f, indent=4)
+    # else:
+    #     pathway_ids = json.load(open(join(RESULTS_PATH, "pathway_ids.json"), "r"))
     for gene in model.genes:
         gene_pathway_ids[gene.id] = []
         for pathway in model.genes_pathways_map[gene.id]:
@@ -208,13 +279,14 @@ def gene_analysis():
     data.index = [e.replace("-", "_") for e in data.index]
     _, _, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
     model.get_genes_pathways_map()
-    if not os.path.exists(join(RESULTS_PATH, "deg/gene_pathway.csv")):
-        gene_pathway_ids = get_gene_pathway_map(data, model)
+    use_cache = False
+    if not os.path.exists(join(RESULTS_PATH, "deg/gene_pathway.csv")) or not use_cache:
+        gene_pathway_ids = get_gene_pathway_map(model)
     else:
         gene_pathway_ids = pd.read_csv(join(RESULTS_PATH, "deg/gene_pathway.csv"), sep="\t", index_col=0)
-    pathway_enrichment(data.index.to_list(), gene_pathway_ids)
+    pathway_enrichment(data.index.tolist(), gene_pathway_ids)
 
-def fc_plot(ax, data, pathways_map, condition_name, common_pathways, plot_number):
+def fc_plot(ax, data, pathways_map, condition_name, common_pathways, plot_number, remove_first=True):
 
     np.random.seed(42)
     values = {}
@@ -223,57 +295,28 @@ def fc_plot(ax, data, pathways_map, condition_name, common_pathways, plot_number
         values[pathway] = data.loc[data.index.isin(reactions)].FC.tolist()
     bar_width = 0.4
 
-    # plt.figure(figsize=(6.4, 6.5))
-    # for i, (pathway, value) in enumerate(values.items()):
-    #     plt.scatter(value, [pathway] * len(value), label=pathway, alpha=0.6)
-    #
-    # plt.xlabel('FC')
-    # plt.title(condition_name)
-    # plt.grid(True)
-    # plt.yticks(ha='right')
-    # plt.tight_layout()
-    # plt.savefig(f"/home/ecunha/omics-integration/results/ngaditana/PRJNA589063/{condition_name}_scatter.png", bbox_inches='tight', dpi=800)
-    # plt.show()
-    # plt.close()
-
-    # plt.figure(figsize=(6.4, 4.8))
-    # for i, (pathway, value) in enumerate(values.items()):
-    #     positive_vals = len([v for v in value if v > 0])
-    #     negative_vals = len([v for v in value if v < 0])
-    #     plt.barh(y=i - bar_width, width=negative_vals, height=bar_width, color='r', label='Negative')
-    #     plt.barh(y=pathway, width=positive_vals, height=bar_width, color='g', label='Positive')
-    #
-    # plt.legend()
-    # plt.xlabel('Number of Reactions')
-    # plt.title(condition_name)
-    # plt.grid(True)
-    # plt.yticks(ha='right')
-    # plt.tight_layout()
-    # plt.savefig(f"/home/ecunha/omics-integration/results/ngaditana/PRJNA589063/{condition_name}_bar.png", bbox_inches='tight', dpi=600)
-    # plt.show()
-    # plt.close()
-
     for i, (pathway, value) in enumerate(values.items()):
         positive_vals = len([v for v in value if v > 0])
         negative_vals = len([v for v in value if v < 0])
         ax.barh(y=pathway, width=negative_vals, height=bar_width, color='r', label='Negative FC' if i == 0 else "")
-        ax.barh(y=pathway, width=positive_vals, height=bar_width, color='g', label='Positive FC' if i == 0 else "")
+        ax.barh(y=pathway, width=positive_vals, height=bar_width, color='g', label='Positive FC' if i == 0 else "", left = negative_vals)
 
-    ax.set_yticklabels([split_label(label, 30) for label in values.keys()])
+    ax.set_yticklabels([split_label(label, 50) for label in values.keys()])
     for lab in ax.get_yticklabels():
         if lab.get_text().replace("\n", "") in common_pathways or lab.get_text().replace("\n", " ") in common_pathways:
             lab.set_fontweight('bold')
-        lab.set_fontsize(7)
+        lab.set_fontsize(6)
 
-    ax.legend(fontsize=7)
-    ax.set_xlabel('Number of Reactions', fontsize=7)
-    # ax.set_title(' '.join(condition_name.split()[0:-1]))
-    # add a letter on the topleft of the plot
-    # ax.grid(True)
-    ax.tick_params(axis='x', labelsize=7)
-    number_letter_map = {0: 'A', 1: 'B'}
-    # ax.text(-0.75, 1, number_letter_map[plot_number], fontsize=10, transform=ax.transAxes, fontweight='bold', va='top', ha='right')
-    # ax.set_yticks(ha='right')
+    if remove_first and plot_number == 0:
+        ax.set_xlabel('')
+        ax.set_xticks([])
+        ax.set_xticklabels([])
+        ax.legend(fontsize=7)
+    else:
+        ax.set_xlabel('Number of Reactions', fontsize=7)
+        ax.tick_params(axis='x', labelsize=7)
+        ax.legend().remove()
+
 
 def split_labels(labels, max_line_length=45):
     split_labels = []
@@ -324,35 +367,132 @@ def get_enzymes_map(model, bmgr):
         labels.append(ec_number_enzyme_map.get(ec_number, ""))
     return labels
 
-def plot_heatmap():
-    np.random.seed(42)
-    data = load_samples(RESULTS_PATH, methods={'gimme': 0.4}, samples=["C3", "C5", "N3", "N5", "P3", "P5"])
+def plot_heatmap(model, methods=None):
+    if methods is None:
+        methods = {'fastcore': 0.4}
+    np.random.seed(0)
+    data = load_samples(RESULTS_PATH, methods=methods, samples=["C3", "C5", "N3", "N5", "P3", "P5"])
     # g = sns.clustermap(data['all'], cmap="viridis", yticklabels=False)
     # plt.setp(g.ax_heatmap.get_xticklabels(), rotation=45, fontsize=14)
     # plt.savefig(join(RESULTS_PATH, "ngaditana_heatmap_complete.png"), dpi=600)
-    gimme = data['gimme']
-    model = MyModel(f"{DATA_PATH}/models/model_ng.xml", "e_Biomass__cytop")
-    bmgr = gimme.loc[(gimme.index.str.startswith("BMGR")) & (
-            (gimme.index.isin(model.pathway_reactions_map["BOIMMG (TAG)"])) |
-            ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (DAG)"]))) |
-            ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (PA)"])))
-    )]
-    bmgr = bmgr.filter(regex="N3|C3|P3|C5|P5|N5_gimme")
-    bmgr = bmgr.loc[~bmgr.index.str.contains("mem")]
-    row_std = bmgr.std(axis=1)
-    bmgr = bmgr[row_std != 0]
-    bmgr.columns = [e.split("_")[0] for e in bmgr.columns]
-    labels = get_enzymes_map(model, bmgr)
-    tmp = deepcopy(bmgr)
-    tmp.index = labels
-    grouped_df = tmp.groupby(tmp.index).mean()
-    g = sns.clustermap(grouped_df, cmap="viridis", z_score=0, figsize=(7.08, 5.5))
-    plt.setp(g.ax_heatmap.get_xticklabels(), fontsize=8)
-    plt.setp(g.ax_heatmap.get_yticklabels(), fontsize=8)
-    # add letter B at the top left of the plot
-    return g
+    for method in methods.keys():
+        gimme = data[method]
+        bmgr = gimme.loc[(gimme.index.str.startswith("BMGR")) & (
+                (gimme.index.isin(model.pathway_reactions_map["BOIMMG (TAG)"])) |
+                ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (DAG)"]))) |
+                ((gimme.index.isin(model.pathway_reactions_map["BOIMMG (PA)"])))
+        )]
+        bmgr = bmgr.filter(regex=f"N3|C3|P3|C5|P5|N5_{list(methods.keys())[0]}")
+        bmgr = bmgr.loc[~bmgr.index.str.contains("mem")]
+        row_std = bmgr.std(axis=1)
+        bmgr = bmgr[row_std != 0]
+        bmgr.columns = [e.split("_")[0] for e in bmgr.columns]
+        labels = get_enzymes_map(model, bmgr)
+        tmp = deepcopy(bmgr)
+        tmp.index = labels
+        grouped_df = tmp.groupby(tmp.index).mean()
+        g = sns.clustermap(grouped_df, cmap="viridis", z_score=0, figsize=(3.50, 4.5))
+        plt.setp(g.ax_heatmap.get_xticklabels(), fontsize=8)
+        plt.setp(g.ax_heatmap.get_yticklabels(), fontsize=8)
+        # add letter B at the top left of the plot
+        return g
 
 
+def reaction_analysis_nitrogen():
+    data = load_data({
+
+        "C3 vs N3 fastcore": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_N3_fastcore_0.4_ACHR_all_results.tsv"),
+        "C3 vs N3 gimme": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_N3_gimme_0.4_ACHR_all_results.tsv"),
+        "C5 vs N5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs N5 gimme": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_N5_gimme_0.4_ACHR_all_results.tsv")
+
+    })
+    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
+
+
+    fig, axs = plt.subplots(2, 2, figsize=(7.08, 9))
+    common_pathways = set()
+
+    for i, (condition, df) in enumerate(data.items()):
+        if i % 2 == 0:
+            common_pathways = set(data[list(data.keys())[i]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[i+1]][1].Pathways.tolist()))
+        dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
+        ordered_pathway_map = OrderedDict()
+        for pathway in dfa_paths:
+            if pathway in pathways_reactions_map:
+                ordered_pathway_map[pathway] = pathways_reactions_map[pathway]
+        ordered_pathway_map = OrderedDict(reversed(list(ordered_pathway_map.items())))
+
+        fc_plot(axs[i // 2, i % 2], data[list(data.keys())[i]][0], ordered_pathway_map,
+                condition, common_pathways, i, False)
+
+    axs[0][0].text(-0.4, 1.05, 'A', fontsize=10, transform=axs[0][0].transAxes, fontweight='bold', va='top', ha='right')
+    axs[0][1].text(-0.4, 1.05, 'B', fontsize=10, transform=axs[0][1].transAxes, fontweight='bold', va='top', ha='right')
+    axs[1][0].text(-0.4, 1.05, 'C', fontsize=10, transform=axs[1][0].transAxes, fontweight='bold', va='top', ha='right')
+    axs[1][1].text(-0.4, 1.05, 'D', fontsize=10, transform=axs[1][1].transAxes, fontweight='bold', va='top', ha='right')
+
+    plt.tight_layout()
+    plt.subplots_adjust(hspace=0.15)
+    plt.savefig(f"{RESULTS_PATH}/ngaditana_nitrogen.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+    plt.show()
+    plt.close()
+
+
+def reaction_analysis_phosphorus():
+    data = load_data({
+
+        "C3 vs P3 fastcore": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_P3_fastcore_0.4_ACHR_all_results.tsv"),
+        "C3 vs P3 gimme": join(RESULTS_PATH, "dfa/C3_gimme_0.4_ACHR_P3_gimme_0.4_ACHR_all_results.tsv"),
+        "C5 vs P5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_P5_fastcore_0.4_ACHR_all_results.tsv"),
+        "C5 vs P5 gimme": join(RESULTS_PATH, "dfa/C5_gimme_0.4_ACHR_P5_gimme_0.4_ACHR_all_results.tsv")
+
+    })
+    reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
+
+
+    fig, axs = plt.subplots(2, 2, figsize=(7.08, 8))
+
+    for i, (condition, df) in enumerate(data.items()):
+        if i % 2 == 0:
+            common_pathways = set(data[list(data.keys())[i]][1].Pathways.tolist()).intersection(set(data[list(data.keys())[i+1]][1].Pathways.tolist()))
+        dfa_paths = data[list(data.keys())[i]][1].Pathways.tolist()
+        ordered_pathway_map = OrderedDict()
+        for pathway in dfa_paths:
+            if pathway in pathways_reactions_map:
+                ordered_pathway_map[pathway] = pathways_reactions_map[pathway]
+        ordered_pathway_map = OrderedDict(reversed(list(ordered_pathway_map.items())))
+
+        fc_plot(axs[i // 2, i % 2], data[list(data.keys())[i]][0], ordered_pathway_map,
+                condition, common_pathways, i, False)
+
+    axs[0][0].text(-0.4, 1.05, 'A', fontsize=10, transform=axs[0][0].transAxes, fontweight='bold', va='top', ha='right')
+    axs[0][1].text(-0.4, 1.05, 'B', fontsize=10, transform=axs[0][1].transAxes, fontweight='bold', va='top', ha='right')
+    axs[1][0].text(-0.4, 1.05, 'C', fontsize=10, transform=axs[1][0].transAxes, fontweight='bold', va='top', ha='right')
+    axs[1][1].text(-0.4, 1.05, 'D', fontsize=10, transform=axs[1][1].transAxes, fontweight='bold', va='top', ha='right')
+
+    plt.tight_layout()
+    plt.savefig(f"{RESULTS_PATH}/ngaditana_phosphorus.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+    plt.show()
+    plt.close()
+
+
+def double_heatmap():
+    model = MyModel(join(DATA_PATH, "models/model_ng.xml"), "e_Biomass__cytop")
+
+    g1 = plot_heatmap(model, {"fastcore": 0.4})
+    g1.ax_cbar.set_position([0.9, 0.81, 0.03, 0.15])
+    g1.ax_cbar.set_yticklabels(labels=g1.ax_cbar.get_yticklabels(), fontsize=8)
+    # plt.tight_layout()
+    plt.savefig(f"{RESULTS_PATH}/ngaditana_cluster_fastcore.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+
+    g2 = plot_heatmap(model, {"gimme": 0.4})
+    g2.ax_cbar.set_position([0.9, 0.81, 0.03, 0.15])
+    g2.ax_cbar.set_yticklabels(labels=g2.ax_cbar.get_yticklabels(), fontsize=8)
+    # plt.tight_layout()
+    plt.savefig(f"{RESULTS_PATH}/ngaditana_cluster_gimme.pdf", bbox_inches='tight', format='pdf', dpi=1200)
+
+    plt.show()
+    plt.close()
 
 if __name__ == '__main__':
     DATA_PATH = r"/home/ecunha/omics-integration/data/ngaditana/"
@@ -360,5 +500,9 @@ if __name__ == '__main__':
     # DATA_PATH = r"C:\Users\Bisbii\PythonProjects\omics-integration/data/ngaditana/"
     # RESULTS_PATH = r"C:\Users\Bisbii\PythonProjects\omics-integration/results/ngaditana/PRJNA589063"
     # reaction_analysis()
-    reaction_analysis_all()
+    # reaction_analysis_double_conditions()
+    # reaction_analysis_all()
     # gene_analysis()
+    reaction_analysis_nitrogen()
+    reaction_analysis_phosphorus()
+    double_heatmap()

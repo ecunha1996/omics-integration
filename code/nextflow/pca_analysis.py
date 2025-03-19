@@ -18,10 +18,11 @@ def plot(components, y, xaxis_title, yaxis_title, filename, legend_title="", add
     fig.update_layout(
         xaxis_title=xaxis_title,
         yaxis_title=yaxis_title,
-        margin=dict(l=20, r=20, t=20, b=20)
+        margin=dict(l=20, r=20, t=20, b=20),
+        font=dict(size=kwargs.get('fontsize', 10))
     )
     fig.update_layout(legend_title_text=legend_title, width=width, height=height)
-    fig.update_layout(coloraxis_colorbar=dict(title='Threshold', yanchor="top", y=1.02, x=1.1, ticks="outside"))
+    fig.update_layout(coloraxis_colorbar=dict(title='Threshold', yanchor="top", y=1.02, x=1.20, ticks="outside"))
     for shape in additional_shapes:
         fig.add_shape(
             shape
@@ -52,7 +53,49 @@ def rank_models_difference(data):
         data_3_fastcore_CN = data.filter(regex=f".*_{thr}", axis=0)
         # non_unique_columns = [col for col in data_3_fastcore_CN.columns if data_3_fastcore_CN[col].nunique() >1]
         # df_non_unique = data_3_fastcore_CN[non_unique_columns]
-        hamming_distances = pairwise_distances(data_3_fastcore_CN.astype(bool).values, metric='hamming')
+        hamming_distances = pairwise_distances(data_3_fastcore_CN.astype(bool).values, metric='jaccard')
         mean_hamming_distance = np.mean(hamming_distances)
         res[thr] = mean_hamming_distance
     return res
+
+
+def plot_with_px(dist, filename=None):
+    # Example data
+    dist_keys = list(dist.keys())
+    dist_values = list(dist.values())
+    
+    bar_color = '#5975A3'
+    # Create a bar plot
+    fig = px.bar(
+        x=dist_keys, 
+        y=dist_values, 
+        labels={'x': 'Threshold', 'y': 'Jaccard distance'},  # Axis labels
+    )
+    fig.update_traces(marker_color=bar_color)
+    # Customize the layout
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array', 
+            tickvals=dist_keys[::2],  # Show every 2nd tick
+            ticktext=[dist_keys[i] for i in range(len(dist_keys)) if i % 2 == 0],
+            color='black'
+            , title_standoff=1# X-axis ticks color
+        ),
+        yaxis=dict(color='black', title_standoff=2),  # Y-axis ticks color
+        margin=dict(l=20, r=20, t=20, b=20),  # Tight margins
+        width=3.5*96,
+        height=2.2*96
+    )
+    fig.update_layout(
+            margin=dict(l=20, r=20, t=20, b=20), 
+            font=dict(size=9, family="Arial"),
+            xaxis=dict(color="black"),  # Set x-axis color to black
+            yaxis=dict(color="black")
+        )
+    
+    # Save the figure
+    if filename:
+        fig.write_image(filename, format="pdf", scale=1)
+    
+    # Show the plot
+    fig.show()

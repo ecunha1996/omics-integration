@@ -17,8 +17,7 @@
   "GLOBAL_THRESHOLD_LOWER": 1,
   "LOCAL_THRESHOLD": 2,
   "ALGORITHMS": [
-    "fastcore",
-    "gimme"
+    "fastcore"
   ],
   "THREAD_NUMBER": 40,
   "fastcore_flux_threshold": 1e-8,
@@ -54,6 +53,7 @@
     "SRR10431615": "C3_2",
     "SRR10431616": "C3_1"
   },
+  "protected_reactions": [],
 "uptake_drains": {
         "f2 medium": ["EX_C00014__dra", "EX_C00059__dra", "EX_C01330__dra", "EX_C00011__dra", "EX_C14818__dra",
                       "EX_C00080__dra", "EX_C00001__dra", "EX_C00305__dra", "EX_C01327__dra", "EX_C00244__dra",

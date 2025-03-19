@@ -27,6 +27,7 @@
   "RECONSTRUCT_MODELS": "",
   "obj_frac": 0.15,
   "objectives":{"e_Biomass__cytop": 1},
+  "protected_reactions": ["R07530__chlo", "R07531__chlo"],
 "uptake_drains": {
         "f2 medium": ["EX_C00014__dra", "EX_C00059__dra", "EX_C01330__dra", "EX_C00011__dra", "EX_C14818__dra",
                       "EX_C00080__dra", "EX_C00001__dra", "EX_C00305__dra", "EX_C01327__dra", "EX_C00244__dra",

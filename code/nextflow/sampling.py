@@ -2,6 +2,7 @@ import argparse
 import itertools
 import json
 import os
+from collections import OrderedDict
 from fileinput import filename
 
 import numpy as np
@@ -85,6 +86,7 @@ def achr_sample(filename, biomass_reaction):
         initial_solution = model_to_sample.slim_optimize()
         init_sol = pfba(model_to_sample)
         print(f"Initial solution: {filename.split('/')[-1], initial_solution}")
+
         assert model_to_sample.optimize().status == "optimal"
         assert  initial_solution > 0
         if "N3" in filename or "N5" in filename:
@@ -98,17 +100,21 @@ def achr_sample(filename, biomass_reaction):
 
         if "LL" in filename :
             model_to_sample.exchanges.EX_C00205__dra.bounds = (-150*2.99, -150*2.99)
-            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-1000, 1000)
-            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.1
+            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-150*2.99, 10000)
+            # model_to_sample.exchanges.EX_C00011__dra.bounds = (-20, 1000)
+            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.10     # (math.log(1.12) - math.log( 0.32)) / (159-99) *24 0.51
         if "ML" in filename:
             model_to_sample.exchanges.EX_C00205__dra.bounds = (-600*2.99, -600*2.99)
-            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-1000, 1000)
-            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.20
+            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-600*2.99, 10000)
+            # model_to_sample.exchanges.EX_C00011__dra.bounds = (-20, 1000)
+            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.20     #   (math.log(2.91) - math.log(0.44)) / (159-99)*24 0.75
         if "HL" in filename:
             model_to_sample.exchanges.EX_C00205__dra.bounds = (-1500*2.99, -1500*2.99)
-            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-1000, 1000)
-            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.25
+            # model_to_sample.exchanges.EX_C00205__dra.bounds = (-1500*2.99, 10000)\\
+            # model_to_sample.exchanges.EX_C00011__dra.bounds = (-20, 1000)
+            model_to_sample.reactions.get_by_id(biomass_reaction).lower_bound = 0.15    #   (math.log(2.71) - math.log(0.52)) / (159-99)*24 0.66
         print(f"New solution: {model_to_sample.slim_optimize()}")
+        assert model_to_sample.optimize().status == "optimal" and model_to_sample.slim_optimize() > 0
         # print(model_to_sample.reactions.e_Biomass__cytop.bounds)
         # model_to_sample = split_reversible_reactions(model_to_sample)
         # solution_after_spliting_reversible_reactions = model_to_sample.optimize().objective_value
@@ -149,6 +155,28 @@ def load_results(file_names):
     results_df.to_csv("ACHR_results.csv")
 
 
+def flux_change(v_stress, v_control):
+    """
+    Computes the flux change considering reaction reversibility.
+    Parameters:
+        v_stress (float): Flux under stress condition.
+        v_control (float): Flux under control condition.
+    Returns:
+        float: Flux change value in the range [-1, 1], where:
+               +1 indicates full activation,
+               -1 indicates full inhibition or full reversal,
+                0 means no change.
+    """
+    if v_stress == 0 and v_control == 0:
+        return 0.0
+
+    if v_stress >= 0 and v_control >= 0:
+        return (v_stress - v_control) / (v_stress + v_control)
+    elif v_stress <= 0 and v_control <= 0:
+        return -(v_stress - v_control) / (abs(v_stress) + abs(v_control))
+    elif v_stress >= 0 >= v_control or v_stress <= 0 <= v_control:
+        return (v_stress - v_control) / (abs(v_stress) + abs(v_control))
+
 def kstest(samples_control: pd.DataFrame, samples_condition: pd.DataFrame, dataset_name: str, results_dir: str):
     """
     Calculate the K-S test to detect significantly altered reactions fluxes.
@@ -165,6 +193,9 @@ def kstest(samples_control: pd.DataFrame, samples_condition: pd.DataFrame, datas
     Returns
     -------
     pd.DataFrame: The results of the K-S test for each reaction.
+    :param samples_control:
+    :param dataset_name:
+    :param samples_condition:
     :param results_dir:
 
     """
@@ -202,10 +233,12 @@ def kstest(samples_control: pd.DataFrame, samples_condition: pd.DataFrame, datas
             data_1_mean = data1.mean()
             data_2_mean = data2.mean()
 
-            foldc = (data_1_mean - data_2_mean) / abs(data_1_mean + data_2_mean)
+            # foldc = (data_1_mean - data_2_mean) / abs(data_1_mean + data_2_mean)
 
-            if data_1_mean < 0 and data_2_mean < 0:
-                foldc = -foldc
+            foldc = flux_change(data_1_mean, data_2_mean)
+
+            # if data_1_mean < 0 and data_2_mean <= 0:
+            #     foldc = -foldc
 
             pvals.append(pval)
             rxnid.append(rxn)
@@ -414,7 +447,7 @@ def create_pathways_map(config_path):
 def sample(config_path):
     params = json.load(open(rf"{config_path}", "r"))
     filenames = [os.path.join(params.get("TROPPO_RESULTS_PATH"), 'integration/models', file) for file in listdir(os.path.join(params.get("TROPPO_RESULTS_PATH"), 'integration/models'))
-                 if not file.endswith("_loopless.xml") and 'gimme' in file
+                 if not file.endswith("_loopless.xml")
                  ]
     sampling_filenames = Parallel(n_jobs=max(30, len(filenames)))(delayed(achr_sample)(filename, "e_Biomass__cytop") for filename in filenames)
     sampling_filenames = {k: v for d in sampling_filenames for k, v in d.items()}
@@ -425,9 +458,11 @@ def sample(config_path):
 def sampling_analysis(config_path):
     params = json.load(open(rf"{config_path}", "r"))
     sampling_names = [file for file in listdir(os.path.join(params.get("TROPPO_RESULTS_PATH"), 'samples'))]
-    samples = {'_'.join(filename.split("_")[:-1]):
+    samples = OrderedDict({'_'.join(filename.split("_")[:-1]):
                    pd.read_csv(f"{os.path.join(params.get('TROPPO_RESULTS_PATH'), 'samples')}/{filename}", sep="\t").round(6) for
-               filename in sampling_names if "loopless" not in filename and 'gimme' in filename}
+               filename in sampling_names if "loopless" not in filename})
+    # order by key alphabetically
+    samples = OrderedDict(sorted(samples.items()))
     kstest_results = {}
     # pairs = [e for e in itertools.combinations(sorted(samples), 2) if e[0].split("_")[1] == e[1].split("_")[1] and e[0].split("_")[0][-1] == e[1].split("_")[0][-1] and "C" in e[0]] # 58
     # pairs = [e for e in itertools.combinations(samples, 2) if e[0].split("_")[1] == e[1].split("_")[1] and "control" in e[0]]  # 43
@@ -460,33 +495,4 @@ if __name__ == '__main__':
 
     # sample("nextflow/PRJNA495151.json")
     sampling_analysis("nextflow/PRJNA495151.json")
-#     params = read_args()
 
-    # filenames = [os.path.join(params.get("specific_models_dir"), file) for file in listdir(params.get("specific_models_dir"))
-    #              if (file.endswith("3_fastcore_0.3.xml"))
-    #              ]
-    # sampling_filenames = Parallel(n_jobs=max(30, len(filenames)))(delayed(achr_sample)(filename, "e_Biomass__cytop") for filename in filenames)
-    # sampling_filenames = {k: v for d in sampling_filenames for k, v in d.items()}
-    # # sampling_filenames = {file.split("/")[-1].replace(".xml", ""):None for file in filenames}
-    # folder = '/'.join(filenames[0].split("/")[:-2])
-    # # if os.path.exists(f"{folder}/samples.h5"):
-    # #     os.remove(f"{folder}/samples.h5")
-    # for sample_name, sample in sampling_filenames.items():
-    #     sample.to_csv(f"{folder}/{sample_name}_ACHR_samples.csv", index=False, sep="\t")
-    # #
-    # print("Loading results...")
-    # samples = {filename.split("_")[0] + "_" + filename.split("_")[1] : pd.read_csv(f"{folder}/{filename}_ACHR_samples.csv", sep="\t").round(6) for filename in sampling_filenames.keys()}
-    # # samples = {filename.split("_")[1] + "_" + filename.split("_")[-4]: None for filename in sampling_filenames}
-    # # for sample in samples.values():
-    # #     sample.drop([col for col in sample.columns if col.startswith("EX_") or col.startswith("DM_") or col.startswith("Sk_")
-    # #                  or col.startswith("e_")], axis=1, inplace=True)
-    # kstest_results = {}
-    # pairs = [e for e in itertools.combinations(samples, 2) if e[0].split("_")[1] == e[1].split("_")[1] and e[0].split("_")[0][-1] == e[1].split("_")[0][-1]]
-    # for pair in pairs:
-    #     kstest_results['_'.join(pair)] = kstest(samples.get(pair[0]), samples.get(pair[1]), '_'.join(pair), '../results/ngaditana/PRJNA589063/dfa/')
-    # samples = {key: remove_reverse_reactions(sample) for key, sample in samples.items()}
-    # for sample_name, sample in samples.items():
-    #     sample.to_csv(f"{folder}/{sample_name}_ACHR_samples_no_reverse.csv", index=False, sep="\t")
-    # dataset = pd.read_csv(os.path.join(os.path.dirname(params.get("model", "./")), "pathways_map.csv"))
-    # for pair, kstest_result in kstest_results.items():
-    #     pathway_enrichment(kstest_result, pair, dataset, '../results/ngaditana/PRJNA589063/dfa/')
