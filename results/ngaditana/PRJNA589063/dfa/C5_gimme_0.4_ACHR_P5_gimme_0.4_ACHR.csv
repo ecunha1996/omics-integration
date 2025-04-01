@@ -1,0 +1,6 @@
+Pathways,ListReactions,SetSize,P-value,P-value_adj,Reject
+"Valine, leucine and isoleucine biosynthesis",7,30,0.0024364910396665897,0.04907789094185559,True
+Pentose phosphate pathway,10,34,4.191218368858711e-05,0.0011819235800181564,True
+Metacyc: [2Fe-2S] iron-sulfur cluster biosynthesis,11,27,4.584313013395291e-07,1.6159703372218402e-05,True
+BOIMMG (DAG),47,250,1.0400061805614705e-10,7.332043572958367e-09,True
+BOIMMG (PA),50,172,7.106264549043104e-20,1.0019833014150777e-17,True

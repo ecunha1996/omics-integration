@@ -1,0 +1,3 @@
+Pathways,ListReactions,SetSize,P-value,P-value_adj,Reject
+BOIMMG (DAG),5,250,0.00029815405365190087,0.032661999163601275,True
+Glycosylphosphatidylinositol (GPI)-anchor biosynthesis,4,7,0.0004632907682780323,0.032661999163601275,True

@@ -1,0 +1,6 @@
+Pathways,ListReactions,SetSize,P-value,P-value_adj,Reject
+"Glycine, serine and threonine metabolism",12,58,0.0017674795832012733,0.03560208874733993,True
+Glycosylphosphatidylinositol (GPI)-anchor biosynthesis,4,7,0.001244984923085603,0.02925714569251167,True
+Sphingolipid metabolism,7,16,0.00013490149631285582,0.0038042221960225336,True
+BOIMMG (PC),25,72,1.8063974762656613e-10,1.2735102207672912e-08,True
+Biotin metabolism,15,15,4.4649510852255195e-17,6.295581030167983e-15,True
