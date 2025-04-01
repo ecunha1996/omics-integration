@@ -54,9 +54,6 @@ def load_model(filename):
                 exchange.lower_bound = -10
         elif exchange.id.startswith("EX_C00205"):
                 exchange.lower_bound = -20
-    # for demand in model_to_sample.demands:
-    #     if 'photon' not in demand.id:
-    #         demand.bounds = (0, 0)
     assert model_to_sample.optimize().status == "optimal"
     return model_to_sample
 
@@ -224,21 +221,18 @@ def kstest(samples_control: pd.DataFrame, samples_condition: pd.DataFrame, datas
         data1 = samples_condition[rxn].round(decimals=4)
         data2 = samples_control[rxn].round(decimals=4)
 
-        # data1 = data1.sample(n=1000)
-        # data2 = data2.sample(n=1000)
+        data1 = data1.sample(n=1000)
+        data2 = data2.sample(n=1000)
 
         if (data1.std() != 0 and data1.mean() != 0) or (data2.std() != 0 and data2.mean() != 0):
+
             kstat, pval = ks_2samp(data1, data2)
 
             data_1_mean = data1.mean()
             data_2_mean = data2.mean()
 
-            # foldc = (data_1_mean - data_2_mean) / abs(data_1_mean + data_2_mean)
-
             foldc = flux_change(data_1_mean, data_2_mean)
 
-            # if data_1_mean < 0 and data_2_mean <= 0:
-            #     foldc = -foldc
 
             pvals.append(pval)
             rxnid.append(rxn)
@@ -345,9 +339,6 @@ def pathway_enrichment(rxnlist: list, dataset_name: str, pathways_data: pd.DataF
 
         hits = hyperdata['ListReactions']
         pool = hyperdata['SetSize']
-
-        # allrxns = hyperdata['SetSize'].sum()
-        # targetrxns = hyperdata['ListReactions'].sum()
 
         allrxns = len(set([item for sublist in pathways_data.values for item in sublist]))
         targetrxns = len(set(rxnlist))

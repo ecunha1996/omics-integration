@@ -17,7 +17,8 @@
   "GLOBAL_THRESHOLD_LOWER": 1,
   "LOCAL_THRESHOLD": 2,
   "ALGORITHMS": [
-    "fastcore"
+    "fastcore",
+    "gimme"
   ],
   "THREAD_NUMBER": 40,
   "fastcore_flux_threshold": 1e-8,

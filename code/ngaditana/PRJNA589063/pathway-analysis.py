@@ -193,8 +193,8 @@ def reaction_analysis_all():
         "C3 vs P3 fastcore": join(RESULTS_PATH, "dfa/C3_fastcore_0.4_ACHR_P3_fastcore_0.4_ACHR_all_results.tsv"),
         "C5 vs N5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_N5_fastcore_0.4_ACHR_all_results.tsv"),
         "C5 vs P5 fastcore": join(RESULTS_PATH, "dfa/C5_fastcore_0.4_ACHR_P5_fastcore_0.4_ACHR_all_results.tsv")
-        
-        
+
+
     })
     reactions_pathways_map, pathways_reactions_map, model = get_reactions_pathway_map(join(DATA_PATH, "models/model_ng.xml"))
 

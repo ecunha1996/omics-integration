@@ -38,34 +38,14 @@ def integrate(config_path: str):
                                       local_threshold=params['LOCAL_THRESHOLD'])
     omics_data = threshold.apply_thresholding_filter()
     thresholds = {round(quantile, 3): np.quantile(omics_data, quantile).round(3) for quantile in linspace(0.05, 0.95, 19)}
-    #thresholds = {round(quantile, 3): np.quantile(omics_data, quantile).round(3) for quantile in linspace(0.4, 0.45, 1)}
-    # thresholds = {0.65: 0.65}
     print(f"Thresholds: {thresholds}")
     for algorithm in params["ALGORITHMS"]:
         troppo_result_dict = {}
         thread_number = params["THREAD_NUMBER"]
         for quantile, threshold in thresholds.items():
-            troppo_result = {}
-            troppo_result.update(troppo_omics_integration(model=template_model, algorithm=algorithm, threshold=threshold,
-                                                                          thread_number=thread_number, omics_dataset=omics_data,
-                                                                          params=params))
-            # omics_data_tmp = omics_data.loc[omics_data.index.str.contains("LL")]
-            # template_model.exchanges.EX_C00205__dra.bounds = (-150*2.99, -150*2.99)
-            # troppo_result.update(troppo_omics_integration(model=template_model, algorithm=algorithm, threshold=threshold,
-            #                                          thread_number=thread_number, omics_dataset=omics_data_tmp,
-            #                                          params=params))
-            #
-            # omics_data_tmp = omics_data.loc[omics_data.index.str.contains("ML")]
-            # template_model.exchanges.EX_C00205__dra.bounds = (-600 * 2.99, -600 * 2.99)
-            # troppo_result.update(troppo_omics_integration(model=template_model, algorithm=algorithm, threshold=threshold,
-            #                                          thread_number=thread_number, omics_dataset=omics_data_tmp,
-            #                                          params=params))
-            #
-            # omics_data_tmp = omics_data.loc[omics_data.index.str.contains("HL")]
-            # template_model.exchanges.EX_C00205__dra.bounds = (-1500 * 2.99, -1500 * 2.99)
-            # troppo_result.update(troppo_omics_integration(model=template_model, algorithm=algorithm, threshold=threshold,
-            #                                          thread_number=thread_number, omics_dataset=omics_data_tmp,
-            #                                          params=params))
+            troppo_result = troppo_omics_integration(model=template_model, algorithm=algorithm, threshold=threshold,
+                                                     thread_number=thread_number, omics_dataset=omics_data,
+                                                     params=params)
 
             for sample in list(troppo_result.keys()):
                 th = str(round(quantile, 3))
@@ -104,7 +84,7 @@ def reconstruct_models(config_path: str):
         file_path = f'{algorithm}_{params["THRESHOLDING_STRATEGY"].replace(" ", "_")}_' \
                     f'{params["GLOBAL_THRESHOLD_UPPER"]}_{params["GLOBAL_THRESHOLD_LOWER"]}_{params["LOCAL_THRESHOLD"]}.csv'
         df = pd.read_csv(os.path.join(params.get("TROPPO_RESULTS_PATH"), 'integration',file_path), index_col=0)
-        best_threshold = 0.4 #get_best_thresholds(df)
+        best_threshold =get_best_thresholds(df)
         integration_result = {}
         df = df.filter(regex=f".*{best_threshold}$", axis=0)
         for row in df.iterrows():
@@ -120,4 +100,5 @@ if __name__ == "__main__":
     config = "nextflow/PRJNA589063.json"
     # config = "nextflow/PRJNA495151.json"
     # config = "nextflow/PRJNA437866.json"
-    # integrate(config)    reconstruct_models(config)
+    # integrate(config)
+    # reconstruct_models(config)
